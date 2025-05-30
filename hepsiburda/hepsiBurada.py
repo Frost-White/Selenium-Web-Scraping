@@ -75,19 +75,7 @@ while counter < max_urun_sayisi:
     urun_url = driver.find_elements(By.XPATH, "//a[@class='productCardLink-module_productCardLink__GZ3eU']")
     urun_gorseller = driver.find_elements(By.XPATH, "//picture//img[@class='hbImageView-module_hbImage__Ca3xO']")
 
-    print(f"\nSayfa {current_page} çekiliyor...\n")
-    
-    def format_date(date):
-        now = datetime.now()
-        delta = now - date
-
-        if delta.days == 0:
-            return f"bugün, {date.strftime('%H:%M')}"
-        elif delta.days == 1:
-            return f"dün, {date.strftime('%H:%M')}"
-        else:
-            return date.strftime('%Y-%m-%d %H:%M')
-        
+    print(f"\nSayfa {current_page} çekiliyor...\n")        
 
     for urun, fiyat, url_eleman, gorsel in zip(urunler, fiyatlar, urun_url, urun_gorseller):
         fiyat_text = fiyat.text.strip()
@@ -171,40 +159,17 @@ while counter < max_urun_sayisi:
             except Exception as e:
                 stok_durumu = "var"  # Eğer stok durumu bilgisi alınamazsa varsayılan olarak 'var'
 
-            # Stok adedini kontrol et ve Dikkat sütununu ekle
             try:
-               # İlk olarak "Stok Adedi" yazısının varlığını kontrol et
-               stok_adedi_baslik = driver.find_elements(By.XPATH, "//div[contains(@class, 'jkj4C4LML4qv2Iq8GkL3')]//div[contains(@class, 'OXP5AzPvafgN_i3y6wGp') and text()='Stok Adedi']")
-    
-               if stok_adedi_baslik:
-                   # Eğer "Stok Adedi" başlığı bulunursa, ilgili stok bilgisini kontrol et
-                   stok_bilgisi_element = driver.find_elements(By.XPATH, "//div[contains(@class, 'AxM3TmSghcDRH1F871Vh')]//span")
-        
-                   if stok_bilgisi_element:
-                       stok_bilgisi = stok_bilgisi_element[0].text.lower()
-            
-                       # Stok durumuna göre değerlendirme yap
-                       if "20 adetten az" in stok_bilgisi:
-                           dikkat = "20 Adetten Az"
-                       elif "10 adetten az" in stok_bilgisi:
-                           dikkat = "10 Adetten Az"
-                       elif "5 adetten az" in stok_bilgisi:
-                          dikkat = "5 Adetten Az"
-                       else:
-                          dikkat = None
-                   else:
-                       dikkat = "Stok Bilgisi Bulunamadı"
-               else:
-                   dikkat = "Stok Adedi Bilgisi Bulunamadı"
-            except Exception as e:
-               print(f"Dikkat bilgisi alınamadı: {urun_url_text} - Hata: {str(e)}")
-               dikkat = "Stokta"
+                    org_fiyat = driver.find_element(By.XPATH, "//div[@data-test-id='default-price']//div[@data-test-id='prev-price']//span").text
+                    org_fiyat = org_fiyat.replace('.', '').replace(',', '.').replace('TL', '').strip()
+                    org_fiyat = float(org_fiyat)
+            except:
+                    org_fiyat = 0.0
 
-
-            guncelleme_tarihi = format_date(datetime.now())
+            guncelleme_tarihi = datetime.now()
             # Veritabanına ürün ekleme veya güncelleme işlemi
             def urun_veritabanina_kaydet(marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, guncelleme_tarihi,org_fiyat):
-                site_no = 1
+                site_no = 2
                 kategori_no = 1
                 # Fiyat 0 ise veya herhangi bir değer boşsa kaydetme
                 cursor.execute("SELECT Fiyat FROM Urun WHERE Urunurl = ?", urun_url_text)
@@ -234,13 +199,21 @@ while counter < max_urun_sayisi:
 
             # Ana döngü içinde ürünü veritabanına kaydet çağrısı
             urun_veritabanina_kaydet(
-                marka, model, 
-                float(fiyat_text.replace(" TL", "").replace(".", "").replace(",", ".")),  # Yeni fiyat
-                urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, dikkat,guncelleme_tarihi
+                marka,
+                model,
+                float(fiyat_text.replace(" TL", "").replace(".", "").replace(",", ".")),
+                urun_url_text,
+                urun_gorsel_url,
+                satici,
+                renk,
+                kapasite,
+                kampanya,
+                stok_durumu,
+                guncelleme_tarihi,
+                org_fiyat
             )
-
-
-            print(f"{counter + 1}. Marka: {marka}, Model: {model}, Fiyat: {fiyat_text}, Satıcı: {satici}, Renk: {renk}, Kapasite: {kapasite}, Kampanya: {kampanya}, Stok: {stok_durumu}, Dikkat: {dikkat},Guncelleme : {guncelleme_tarihi}, URL: {urun_url_text}")
+            
+            print(f"{counter + 1}. Marka: {marka}, Model: {model}, Fiyat: {fiyat_text}, Satıcı: {satici}, Renk: {renk}, Kapasite: {kapasite}, Kampanya: {kampanya}, Stok: {stok_durumu},Guncelleme : {guncelleme_tarihi}, URL: {urun_url_text}")
 
             # Ürün sayfasını kapat ve ana sekmeye dön
             driver.close()
