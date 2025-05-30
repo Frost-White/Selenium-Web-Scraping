@@ -11,8 +11,8 @@ import pyodbc
 # SQL Server bağlantı bilgileri
 conn = pyodbc.connect(
     "Driver={SQL Server};"
-    "Server=CFK\\SQLEXPRESS;"
-    "Database=HepsiBurada;"
+    "Server=DESKTOP-Q0O2PEL;"
+    "Database=Proje;"
     "Trusted_Connection=yes;"
 )
 

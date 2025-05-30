@@ -17,8 +17,6 @@ conn = pyodbc.connect(
 )
 cursor = conn.cursor()
 
-cursor = conn.cursor()
-
 # Chrome driver ayarları
 chrome_options = Options()
 chrome_options.add_argument("--disable-gpu")

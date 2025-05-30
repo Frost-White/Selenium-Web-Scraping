@@ -11,8 +11,8 @@ import pyodbc
 # SQL Server bağlantı bilgileri
 conn = pyodbc.connect(
     "Driver={SQL Server};"
-    "Server=CFK\\SQLEXPRESS;"
-    "Database=HepsiBurada;"
+    "Server=DESKTOP-Q0O2PEL;"
+    "Database=Proje;"
     "Trusted_Connection=yes;"
 )
 
@@ -76,17 +76,6 @@ while counter < max_urun_sayisi:
     urun_gorseller = driver.find_elements(By.XPATH, "//picture//img[@class='hbImageView-module_hbImage__Ca3xO']")
 
     print(f"\nSayfa {current_page} çekiliyor...\n")
-
-    def format_date(date):
-        now = datetime.now()
-        delta = now - date
-
-        if delta.days == 0:
-            return f"bugün, {date.strftime('%H:%M')}"
-        elif delta.days == 1:
-            return f"dün, {date.strftime('%H:%M')}"
-        else:
-            return date.strftime('%Y-%m-%d %H:%M')
 
     for urun, fiyat, url_eleman, gorsel in zip(urunler, fiyatlar, urun_url, urun_gorseller):
         fiyat_text = fiyat.text.strip()
@@ -193,68 +182,63 @@ while counter < max_urun_sayisi:
                     stok_durumu = "var"
             except Exception as e:
                 stok_durumu = "var"  # Eğer stok durumu bilgisi alınamazsa varsayılan olarak 'var'
-
-            # Stok adedini kontrol et ve Dikkat sütununu ekle
             try:
-                # Dikkat bilgisi kontrolü
-                dikkat_element = driver.find_elements(By.XPATH, "//div[contains(@class, 'AxM3TmSghcDRH1F871Vh')]//span")
-                if dikkat_element and "50 adetten az" in dikkat_element[0].text.lower():
-                    dikkat = "Tükenmek Üzere"
-                else:
-                    dikkat = None
-            except Exception as e:
-                print(f"Dikkat bilgisi alınamadı: {urun_url_text} - Hata: {str(e)}")
-                dikkat = "Stokta"
+                    org_fiyat = driver.find_element(By.XPATH, "//div[@data-test-id='default-price']//div[@data-test-id='prev-price']//span").text
+                    org_fiyat = org_fiyat.replace('.', '').replace(',', '.').replace('TL', '').strip()
+                    org_fiyat = float(org_fiyat)
+            except:
+                    org_fiyat = 0.0
 
-            guncelleme_tarihi = format_date(datetime.now())
-
+            guncelleme_tarihi = datetime.now()
             # Veritabanına ürün ekleme veya güncelleme işlemi
-            def urun_veritabanina_kaydet(marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, dikkat, guncelleme_tarihi):
-                # Ürünün veritabanında olup olmadığını kontrol et
-                cursor.execute(
-                    """
-                    SELECT YeniFiyat FROM HepsiBuradaTablet
-                    WHERE Marka = ? AND Model = ? AND Renk = ? AND Hafıza = ? AND Urunurl = ?
-                    """, 
-                    marka, model, renk, kapasite, urun_url_text
-                )
+           # Veritabanına ürün ekleme veya güncelleme işlemi
+            def urun_veritabanina_kaydet(marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, guncelleme_tarihi,org_fiyat):
+                site_no = 2
+                kategori_no = 3
+                # Fiyat 0 ise veya herhangi bir değer boşsa kaydetme
+                cursor.execute("SELECT Fiyat FROM Urun WHERE Urunurl = ?", urun_url_text)
                 sonuc = cursor.fetchone()
-
+                if yeni_fiyat == 0.0 or not all([marka, model, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu]):
+                    print("Veri eksik veya fiyat 0, kayıt yapılmadı.")
+                    return
                 if sonuc:
-                    # Ürün zaten varsa, fiyatını kontrol et ve güncelle
-                    mevcut_fiyat = sonuc[0]
-                  
-                        # Eski fiyatı kaydedip yeni fiyatı güncelle
-                    cursor.execute(
-                        """
-                        UPDATE HepsiBuradaTablet 
-                        SET EskiFiyat = YeniFiyat, YeniFiyat = ?, Satici = ?, Kampanya = ?, Stok = ?, Dikkat = ?, Guncellemetarihi = ?
-                        WHERE Marka = ? AND Model = ? AND Renk = ? AND Hafıza = ? AND Urunurl = ?
-                        """,
-                        yeni_fiyat, satici, kampanya, stok_durumu, dikkat, guncelleme_tarihi, marka, model, renk, kapasite, urun_url_text
-                    )
-                
+                    cursor.execute("SELECT Fiyat, Urun_Id, Guncellemetarihi FROM Urun WHERE Urunurl = ?", urun_url_text)
+                    id_sonuc = cursor.fetchone()
+                    fiyat = sonuc[0]
+                    urun_id = id_sonuc[1]
+                    tarih = id_sonuc[2]
+                    cursor.execute("INSERT INTO Urun_Eski_Fiyat (Urun_Id, Fiyat, Tarih) Values (?, ?, ?)", urun_id, fiyat, tarih)
+                    cursor.execute("UPDATE Urun SET Fiyat = ?, Kampanya = ?, Stok = ?, Guncellemetarihi = ?, Org_Fiyat = ? WHERE Urunurl = ?",
+                                yeni_fiyat, kampanya, stok_durumu, guncelleme_tarihi, org_fiyat, urun_url_text)
                 else:
-                    # Ürün yoksa yeni bir kayıt ekle
-                    cursor.execute(
-                        """
-                        INSERT INTO HepsiBuradaTablet (Marka, Model, YeniFiyat, EskiFiyat, Urunurl, Urungorsel, Satici, Renk, Hafıza, Kampanya, Stok, Dikkat, Guncellemetarihi)
-                        VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, dikkat, guncelleme_tarihi
-                    )
+                    cursor.execute("""
+                        INSERT INTO Urun (Marka, Model, Fiyat, Urunurl, Urungorsel, Satici, Kampanya, Stok, Guncellemetarihi, Site, Kategori, Org_Fiyat)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, kampanya, stok_durumu, guncelleme_tarihi, site_no, kategori_no, org_fiyat)
+                    cursor.execute("SELECT Urun_Id FROM Urun WHERE Urunurl = ?", urun_url_text)
+                    id_sonuc = cursor.fetchone()
+                    cursor.execute("INSERT INTO Mobil_Ekstra (Urun_Id, Renk, Hafıza) VALUES (?, ?, ?)", id_sonuc[0], renk, kapasite)
                 # Her işlemden sonra değişiklikleri veritabanına kaydet
-                conn.commit()  # <<--- Burada veritabanı güncelleniyor 
+                conn.commit()  # <<--- Burada veritabanı güncelleniyor    
 
             # Ana döngü içinde ürünü veritabanına kaydet çağrısı
             urun_veritabanina_kaydet(
-                marka, model, 
-                float(fiyat_text.replace(" TL", "").replace(".", "").replace(",", ".")),  # Yeni fiyat
-                urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, dikkat, guncelleme_tarihi
+                marka,
+                model,
+                float(fiyat_text.replace(" TL", "").replace(".", "").replace(",", ".")),
+                urun_url_text,
+                urun_gorsel_url,
+                satici,
+                renk,
+                kapasite,
+                kampanya,
+                stok_durumu,
+                guncelleme_tarihi,
+                org_fiyat
             )
 
 
-            print(f"{counter + 1}. Marka: {marka}, Model: {model}, Fiyat: {fiyat_text}, Satıcı: {satici}, Renk: {renk}, Kapasite: {kapasite}, Kampanya: {kampanya}, Stok: {stok_durumu}, Dikkat: {dikkat},Guncelleme : {guncelleme_tarihi}, URL: {urun_url_text}")
+            print(f"{counter + 1}. Marka: {marka}, Model: {model}, Fiyat: {fiyat_text}, Satıcı: {satici}, Renk: {renk}, Kapasite: {kapasite}, Kampanya: {kampanya}, Stok: {stok_durumu},Guncelleme : {guncelleme_tarihi}, URL: {urun_url_text}")
 
             # Ürün sayfasını kapat ve ana sekmeye dön
             driver.close()
