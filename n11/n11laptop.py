@@ -23,7 +23,7 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--enable-unsafe-swiftshader")
 
 # ChromeDriver başlatılıyor
-driver = webdriver.Chrome(service=Service("C:\\Users\\syuce\\Desktop\\bitirme_projesi_veri_cekme\\n11\\chromedriver.exe"), options=chrome_options)
+driver = webdriver.Chrome(service=Service("C:\\Users\\syuce\\Desktop\\bitirme_projesi_veri_cekme\\Selenium-Web-Scraping\\n11\\chromedriver.exe"), options=chrome_options)
 driver.maximize_window()
 
 original_tab = driver.current_window_handle

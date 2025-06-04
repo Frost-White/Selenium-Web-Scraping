@@ -24,7 +24,7 @@ chrome_options.add_argument("--headless")
 chrome_options.add_argument("--enable-unsafe-swiftshader")
 
 # ChromeDriver başlatılıyor
-driver = webdriver.Chrome(service=Service("C:\\Users\\syuce\\Desktop\\bitirme_projesi_veri_cekme\\trendyol\\chromedriver.exe"), options=chrome_options)
+driver = webdriver.Chrome(service=Service("C:\\Users\\syuce\\Desktop\\bitirme_projesi_veri_cekme\\Selenium-Web-Scraping\\trendyol\\chromedriver.exe"), options=chrome_options)
 driver.maximize_window()
 
 from datetime import datetime

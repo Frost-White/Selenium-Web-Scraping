@@ -18,6 +18,10 @@ conn = pyodbc.connect(
 
 cursor = conn.cursor()
 
+# Site ve kategori numaraları
+site_no = 1  # HepsiBurada
+kategori_no = 3  # Tablet
+
 # Chrome driver ayarları
 chrome_options = Options()
 chrome_options.add_argument("--disable-gpu")
@@ -25,7 +29,7 @@ chrome_options.add_argument("--no-sandbox")
 
 driver = webdriver.Chrome()
 # WebDriver'ı başlat
-driver.maximize_window()
+driver.set_window_size(1024, 768)  # Genişlik: 1024px, Yükseklik: 768px
 
 # İlgili başlangıç sayfasının URL'sini tanımlayalım
 base_url = "https://www.hepsiburada.com/tablet-c-3008012?sayfa="
@@ -54,6 +58,77 @@ kapasite_formatlari = {
     "2 tb": "2 TB",
 }
 
+def extract_price_from_html(driver):
+    try:
+        # Önce indirimli fiyat yapısını dene
+        try:
+            price_element = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//div[@data-test-id='price']//div[@data-test-id='default-price']//div[contains(@class, 'z7kokklsVwh0K5zFWjIO')]//span"))
+            )
+            new_price = price_element.text.strip()
+            
+            # Eski fiyatı kontrol et
+            try:
+                old_price_element = driver.find_element(By.XPATH, "//div[@data-test-id='prev-price']//span")
+                old_price = old_price_element.text.strip()
+            except:
+                old_price = None
+                
+            return new_price, old_price
+        except:
+            # İndirimli yapı bulunamazsa, genel fiyat yapısını dene
+            try:
+                # Daha genel bir XPath kullanarak fiyatı bul
+                price_element = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, "//div[@data-test-id='price']//span[contains(text(), 'TL')]"))
+                )
+                new_price = price_element.text.strip()
+                return new_price, None
+            except:
+                # Son çare olarak, herhangi bir fiyat içeren span'i ara
+                try:
+                    price_element = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'TL')]"))
+                    )
+                    new_price = price_element.text.strip()
+                    return new_price, None
+                except:
+                    print("Fiyat bulunamadı")
+                    return None, None
+    except Exception as e:
+        print(f"Fiyat çekilirken hata oluştu: {str(e)}")
+        return None, None
+
+def format_price(price_str):
+    if not price_str:
+        return None
+    try:
+        # Fiyat string'ini temizle
+        cleaned_price = price_str.replace(" TL", "").replace(".", "").replace(",", ".")
+        
+        # Sadece sayı ve nokta içeriyor mu kontrol et
+        if not all(c.isdigit() or c == '.' for c in cleaned_price):
+            print(f"Geçersiz fiyat formatı: {price_str}")
+            return None
+            
+        return float(cleaned_price)
+    except Exception as e:
+        print(f"Fiyat formatlanırken hata oluştu: {str(e)}")
+        return None
+
+def extract_kampanya(driver):
+    try:
+        # Önce kampanya metnini bulmaya çalış
+        kampanya_element = driver.find_element(By.XPATH, "//div[@data-test-id='price']//span[contains(text(), 'kazanç') or contains(text(), 'indirim') or contains(text(), 'kampanya')]")
+        return kampanya_element.text.strip()
+    except:
+        try:
+            # Diğer kampanya metinlerini ara
+            kampanya_element = driver.find_element(By.XPATH, "//span[contains(text(), 'kazanç') or contains(text(), 'indirim') or contains(text(), 'kampanya')]")
+            return kampanya_element.text.strip()
+        except:
+            return "Yok"
+
 # Ürün bilgilerini çekme ve veritabanına kaydetme
 while counter < max_urun_sayisi:
     # URL'yi güncelle
@@ -76,6 +151,17 @@ while counter < max_urun_sayisi:
     urun_gorseller = driver.find_elements(By.XPATH, "//picture//img[@class='hbImageView-module_hbImage__Ca3xO']")
 
     print(f"\nSayfa {current_page} çekiliyor...\n")
+
+    def format_date(date):
+        now = datetime.now()
+        delta = now - date
+
+        if delta.days == 0:
+            return f"bugün, {date.strftime('%H:%M')}"
+        elif delta.days == 1:
+            return f"dün, {date.strftime('%H:%M')}"
+        else:
+            return date.strftime('%Y-%m-%d %H:%M')
 
     for urun, fiyat, url_eleman, gorsel in zip(urunler, fiyatlar, urun_url, urun_gorseller):
         fiyat_text = fiyat.text.strip()
@@ -166,11 +252,15 @@ while counter < max_urun_sayisi:
                 renk = "Bilinmiyor"
 
 
-            # Kampanya bilgisini çek
-            kampanya_element = driver.find_elements(By.XPATH, "//span[@class='Gog20OJDAXL6rr7HFmj2']")
-            kampanya = kampanya_element[0].text.strip() if kampanya_element else "Yok"
+            # Fiyat bilgilerini çek
+            new_price_str, old_price_str = extract_price_from_html(driver)
+            new_price = format_price(new_price_str)
+            old_price = format_price(old_price_str)
 
-            # Stok bilgisini kontrol et
+            # Kampanya bilgisini çek
+            kampanya = extract_kampanya(driver)
+
+            # Stok bilgilerini kontrol et
             try:
                 stok_element = driver.find_element(By.XPATH, "//div[@class='ttVQfRCD0ugwrs65whKO _pGf4dDvGK0tdoimtqWf']")
                 stok_yazisi = stok_element.text.strip().lower()
@@ -182,17 +272,23 @@ while counter < max_urun_sayisi:
                     stok_durumu = "var"
             except Exception as e:
                 stok_durumu = "var"  # Eğer stok durumu bilgisi alınamazsa varsayılan olarak 'var'
+
+            # Stok adedini kontrol et ve Dikkat sütununu ekle
             try:
-                    org_fiyat = driver.find_element(By.XPATH, "//div[@data-test-id='default-price']//div[@data-test-id='prev-price']//span").text
-                    org_fiyat = org_fiyat.replace('.', '').replace(',', '.').replace('TL', '').strip()
-                    org_fiyat = float(org_fiyat)
-            except:
-                    org_fiyat = 0.0
+                # Dikkat bilgisi kontrolü
+                dikkat_element = driver.find_elements(By.XPATH, "//div[contains(@class, 'AxM3TmSghcDRH1F871Vh')]//span")
+                if dikkat_element and "50 adetten az" in dikkat_element[0].text.lower():
+                    dikkat = "Tükenmek Üzere"
+                else:
+                    dikkat = None
+            except Exception as e:
+                print(f"Dikkat bilgisi alınamadı: {urun_url_text} - Hata: {str(e)}")
+                dikkat = "Stokta"
 
             guncelleme_tarihi = datetime.now()
+
             # Veritabanına ürün ekleme veya güncelleme işlemi
-           # Veritabanına ürün ekleme veya güncelleme işlemi
-            def urun_veritabanina_kaydet(marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, guncelleme_tarihi,org_fiyat):
+            def urun_veritabanina_kaydet(marka, model, yeni_fiyat, org_fiyat, urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, guncelleme_tarihi):
                 site_no = 2
                 kategori_no = 3
                 # Fiyat 0 ise veya herhangi bir değer boşsa kaydetme
@@ -218,27 +314,19 @@ while counter < max_urun_sayisi:
                     cursor.execute("SELECT Urun_Id FROM Urun WHERE Urunurl = ?", urun_url_text)
                     id_sonuc = cursor.fetchone()
                     cursor.execute("INSERT INTO Mobil_Ekstra (Urun_Id, Renk, Hafıza) VALUES (?, ?, ?)", id_sonuc[0], renk, kapasite)
-                # Her işlemden sonra değişiklikleri veritabanına kaydet
-                conn.commit()  # <<--- Burada veritabanı güncelleniyor    
+
+                conn.commit()
+
 
             # Ana döngü içinde ürünü veritabanına kaydet çağrısı
             urun_veritabanina_kaydet(
-                marka,
-                model,
-                float(fiyat_text.replace(" TL", "").replace(".", "").replace(",", ".")),
-                urun_url_text,
-                urun_gorsel_url,
-                satici,
-                renk,
-                kapasite,
-                kampanya,
-                stok_durumu,
-                guncelleme_tarihi,
-                org_fiyat
+                marka, model, 
+                new_price,  # Yeni fiyat
+                old_price,  # Eski fiyat
+                urun_url_text, urun_gorsel_url, satici, renk, kapasite, kampanya, stok_durumu, guncelleme_tarihi
             )
 
-
-            print(f"{counter + 1}. Marka: {marka}, Model: {model}, Fiyat: {fiyat_text}, Satıcı: {satici}, Renk: {renk}, Kapasite: {kapasite}, Kampanya: {kampanya}, Stok: {stok_durumu},Guncelleme : {guncelleme_tarihi}, URL: {urun_url_text}")
+            print(f"{counter + 1}. Marka: {marka}, Model: {model}, Yeni Fiyat: {new_price}, Eski Fiyat: {old_price}, Satıcı: {satici}, Renk: {renk}, Kapasite: {kapasite}, Kampanya: {kampanya}, Stok: {stok_durumu}, Dikkat: {dikkat}, Guncelleme: {guncelleme_tarihi}, URL: {urun_url_text}")
 
             # Ürün sayfasını kapat ve ana sekmeye dön
             driver.close()
