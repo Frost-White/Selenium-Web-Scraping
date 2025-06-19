@@ -19,7 +19,7 @@ conn = pyodbc.connect(
 cursor = conn.cursor()
 
 # Site ve kategori numaraları
-site_no = 1  # HepsiBurada
+site_no = 2  # HepsiBurada
 kategori_no = 2  # Mobil
 
 # Chrome driver ayarları
@@ -207,8 +207,12 @@ while counter < max_urun_sayisi:
             # Fiyat bilgilerini çek
             new_price_str, old_price_str = extract_price_from_html(driver)
             new_price = format_price(new_price_str)
-            old_price = format_price(old_price_str)
+            if new_price is None:
+                new_price = 0.0
 
+            old_price = format_price(old_price_str)
+            if old_price is None:
+                old_price = 0.0
             try:
                 # Model bilgisini çek
                 model_element = WebDriverWait(driver, 5).until(

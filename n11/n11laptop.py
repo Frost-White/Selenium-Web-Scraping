@@ -36,7 +36,7 @@ counter = 0
 def urun_veritabanina_kaydet(marka, model, yeni_fiyat, urun_url_text, urun_gorsel_url, satici, kapasite, kullanim_amaci, guncelleme_tarihi,
                               kampanya, ram, islemci_tipi, islemci_nesli, islemci_modeli, ekran_boyutu, ekran_karti, stok, org_fiyat):
 
-            site_no = 2
+            site_no = 3
             kategori_no = 4
             # Fiyat 0 ise veya herhangi bir değer boşsa kaydetme
             if yeni_fiyat == 0.0 or not all([marka, model, urun_url_text,ram, islemci_tipi, islemci_nesli,

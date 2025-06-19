@@ -66,7 +66,7 @@ def urun_veritabanina_kaydet(marka, model, fiyat, urun_url, gorsel_url, satici, 
 
     conn.commit()
 
-while counter < 200:
+while counter < 400:
     print(f"Sayfa: {current_page}")
     url = f"{base_url}{current_page}"
     driver.get(url)
